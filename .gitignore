@@ -1,0 +1,14 @@
+# 1. Ignore everything
+*
+
+# 2. Whitelist the .gitignore file itself (optional but recommended)
+!.gitignore
+
+# 3. Whitelist specific files
+!README.md
+!docker-compose.yml
+!.env.example
+
+# 4. Whitelist a directory AND its contents
+# !my_folder/
+# !my_folder/**

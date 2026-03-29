@@ -1,0 +1,260 @@
+---
+services:
+  # -----------
+  # TV / Movies
+  # -----------
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - UMASK=002
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./config/sonarr-config:/config
+      - ./data:/data
+    ports:
+      - 8989:8989
+    restart: unless-stopped
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - UMASK=002
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./config/radarr-config:/config
+      - ./data:/data
+    ports:
+      - 7878:7878
+    restart: unless-stopped
+
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - VERSION=docker
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - ./config/plex-config:/config
+      - ./data/media:/media
+    network_mode: host
+    restart: unless-stopped
+
+  tautulli:
+    image: lscr.io/linuxserver/tautulli:latest
+    container_name: tautulli
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./config/tautulli-config:/config
+    ports:
+      - 8181:8181
+    depends_on:
+      - plex
+    restart: unless-stopped
+
+  plexanisync-hotsno:
+    image: ghcr.io/rickdb/plexanisync:latest
+    container_name: plexanisync-hotsno
+    environment:
+      - SETTINGS_FILE=/config/settings.ini
+      - INTERVAL=60
+    volumes:
+      - ./config/plexanisync-config/hotsno.ini:/config/settings.ini:ro
+      - ./config/plexanisync-config/custom_mappings.yaml:/plexanisync/custom_mappings.yaml
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+
+  # -----
+  # Manga
+  # -----
+  kavita:
+    image: lscr.io/linuxserver/kavita:latest
+    container_name: kavita
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./data/media/manga:/manga
+      - ./config/kavita-config:/config
+    restart: unless-stopped
+    network_mode: service:ts-kavita
+
+  ts-kavita:
+    image: tailscale/tailscale:latest
+    container_name: ts-kavita
+    hostname: kavita
+    environment:
+      - TS_AUTHKEY=${TS_KAVITA_AUTHKEY}
+      - TS_SERVE_CONFIG=/config/kavita.json
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ./config/ts-kavita-config/state:/var/lib/tailscale
+      - ./config/ts-kavita-config/config:/config
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    ports:
+      - 5000:5000 # kavita
+    restart: unless-stopped
+
+  komf:
+    image: sndxr/komf:latest
+    container_name: komf
+    environment:
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./config/komf-config:/config
+    ports:
+      - 8085:8085
+    user: 1000:13000
+    restart: unless-stopped
+
+  suwayomi:
+    image: ghcr.io/suwayomi/tachidesk:preview
+    container_name: suwayomi
+    volumes:
+      - ./config/suwayomi-config:/home/suwayomi/.local/share/Tachidesk
+    ports:
+      - 4567:4567
+    restart: unless-stopped
+
+  # -----
+  # Music
+  # -----
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    user: 1000:13000
+    environment:
+      - ND_SCANSCHEDULE=1h
+      - ND_LOGLEVEL=info
+      - TZ="America/Los_Angeles"
+      - ND_LASTFM_APIKEY=${ND_LASTFM_APIKEY}
+      - ND_LASTFM_SECRET=${ND_LASTFM_SECRET}
+    volumes:
+      - ./config/navidrome-config:/data
+      - ./data/media/music:/music:ro
+    restart: unless-stopped
+    network_mode: service:ts-navidrome
+
+  ts-navidrome:
+    image: tailscale/tailscale:latest
+    container_name: ts-navidrome
+    hostname: navidrome
+    environment:
+      - TS_AUTHKEY=${TS_NAVIDROME_AUTHKEY}
+      - TS_SERVE_CONFIG=/config/navidrome.json
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ./config/ts-navidrome-config/state:/var/lib/tailscale
+      - ./config/ts-navidrome-config/config:/config
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
+    ports:
+    - 4533:4533 # navidrome
+    restart: unless-stopped
+
+  # ---
+  # VPN
+  # ---
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${GLUETUN_WIREGUARD_PRIVATE_KEY}
+      - WIREGUARD_ADDRESSES=10.67.167.225/32
+      - SERVER_CITIES=San Jose CA
+    ports:
+      - 8080:8080 # qbittorrent
+      - 6881:6881 # qbittorrent
+      - 6881:6881/udp # qbittorrent
+    restart: always
+
+  # ----------
+  # Torrenting
+  # ----------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:develop
+    container_name: prowlarr
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - UMASK=002
+      - TZ="America/Los_Angeles"
+    volumes:
+      - ./config/prowlarr-config:/config
+    ports:
+      - 9696:9696
+    restart: unless-stopped
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - UMASK=002
+      - TZ="America/Los_Angeles"
+      - WEBUI_PORT=8080
+    volumes:
+      - ./config/qbittorrent-config:/config
+      - ./data/torrents:/data/torrents
+    network_mode: "service:gluetun"
+    restart: unless-stopped
+
+  # ---
+  # DDL
+  # ---
+  fmd2:
+    image: banhcanh/docker-fmd2:kasm-v3
+    container_name: fmd2
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - TZ="America/Los_Angeles"
+      - UMASK=022
+      - THRESHOLD_MINUTES=5
+      - TRANSFER_FILE_TYPE=.cbz
+    volumes:
+      - ./config/fmd2-config/userdata:/app/FMD2/userdata
+      - ./data/ddl/manga:/downloads
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+
+  deemix:
+    image: ghcr.io/bambanah/deemix:latest
+    container_name: deemix
+    environment:
+      - PUID=1000
+      - PGID=13000
+      - UMASK_SET=002
+    volumes:
+      - ./data/media/music:/downloads
+      - ./config/deemix-config:/config
+    ports:
+      - 6595:6595
+    restart: unless-stopped 
+
