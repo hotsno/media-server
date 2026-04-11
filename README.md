@@ -1,4 +1,4 @@
-# mediaserver
+# media-server
 
 My self-hosted media server (where I put my Blu-Ray and CD rips)
 
